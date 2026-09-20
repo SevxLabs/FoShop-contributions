@@ -11,3 +11,6 @@ After inventory and payment commit, reportSale(transactionId, source, actualSold
 Without a registered provider, existing pricing is unchanged. Disabling a provider owner unregisters it. Market algorithms, price history, limits and persistence remain addon responsibilities.
 
 Validation: the changed source compiles with Java 21 and the inspected runtime dependencies using an external validation build. An integration fork using this API has passed server startup; exhaustive inventory/payment and packet-thread tests remain necessary. The repository's original Maven configuration and metadata are unchanged.
+## Rotating selection
+
+FoShopRotationEvent fires synchronously before selecting a new rotation. It exposes immutable eligible candidates (section ID, item ID, material) and the slot limit. A listener may choose a distinct eligible subset within that limit or leave selection null for ordinary random selection. FoShop retains multiplier assignment and shuffles the chosen entries. Cancellation retains existing offers and retries in five minutes. Do not perform blocking work in listeners. Category pools and quotas remain addon policy; this API contains no server-specific selection rules.

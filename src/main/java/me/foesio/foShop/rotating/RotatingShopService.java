@@ -1,6 +1,8 @@
 package me.foesio.foShop.rotating;
 
 import me.foesio.foShop.FoShop;
+import me.foesio.foShop.api.FoShopRotationEvent;
+import me.foesio.foShop.api.FoShopRotationEvent.RotationCandidate;
 import me.foesio.foShop.model.ShopItem;
 import me.foesio.foShop.model.ShopSection;
 import me.foesio.foShop.shop.GlobalSellPriceService;
@@ -152,6 +154,15 @@ public class RotatingShopService {
 
     public void resetNow() {
         List<RotationCandidate> candidates = eligibleCandidates();
+        FoShopRotationEvent event = new FoShopRotationEvent(candidates, MULTIPLIERS.size());
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            plugin.getLogger().warning("Rotation selection postponed by an addon; current offers retained. Retrying in five minutes.");
+            nextResetAt = System.currentTimeMillis() + 300_000L;
+            scheduleNextReset();
+            return;
+        }
+        if (event.selection() != null) candidates = new ArrayList<>(event.selection());
         Collections.shuffle(candidates, ThreadLocalRandom.current());
 
         List<RotatingEntry> nextEntries = new ArrayList<>();
@@ -215,7 +226,7 @@ public class RotatingShopService {
             }
             for (ShopItem item : section.items()) {
                 if (isEligible(item) && itemParticipates(section.id(), item.id())) {
-                    candidates.add(new RotationCandidate(section.id(), item.id()));
+                    candidates.add(new RotationCandidate(section.id(), item.id(), item.material()));
                 }
             }
         }
@@ -225,7 +236,7 @@ public class RotatingShopService {
                         && entry.price() > 0D
                         && entry.rotatingShop()
                         && !plugin.getShopManager().hasPlainSellOffer(entry.material())) {
-                    candidates.add(new RotationCandidate(GlobalSellPriceService.ROTATING_SECTION_ID, entry.material().name()));
+                    candidates.add(new RotationCandidate(GlobalSellPriceService.ROTATING_SECTION_ID, entry.material().name(), entry.material()));
                 }
             }
             if (!hasPlainPotionSellOffer()) {
@@ -233,7 +244,7 @@ public class RotatingShopService {
                     if (entry.enabled()
                             && entry.price() > 0D
                             && entry.rotatingShop()) {
-                        candidates.add(new RotationCandidate(GlobalSellPriceService.ROTATING_SECTION_ID, GlobalSellPriceService.potionEntryId(entry.potionType())));
+                        candidates.add(new RotationCandidate(GlobalSellPriceService.ROTATING_SECTION_ID, GlobalSellPriceService.potionEntryId(entry.potionType()), Material.POTION));
                     }
                 }
             }
@@ -243,7 +254,7 @@ public class RotatingShopService {
                             && entry.price() > 0D
                             && entry.rotatingShop()) {
                         candidates.add(new RotationCandidate(GlobalSellPriceService.ROTATING_SECTION_ID,
-                                GlobalSellPriceService.enchantmentEntryId(entry.enchantmentKey(), entry.level())));
+                                GlobalSellPriceService.enchantmentEntryId(entry.enchantmentKey(), entry.level()), Material.ENCHANTED_BOOK));
                     }
                 }
             }
@@ -366,9 +377,6 @@ public class RotatingShopService {
     private void cancelTask() {
         resetScheduled = false;
         resetGeneration++;
-    }
-
-    private record RotationCandidate(String sectionId, String itemId) {
     }
 
     public record RotatingEntry(String sectionId, String itemId, double multiplier) {
